@@ -1,0 +1,38 @@
+name: Secure CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  security-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: SonarQube SAST Scan
+      uses: SonarSource/sonarqube-scan-action@v2
+      env:
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    - name: Trivy Dependency Scan (SCA)
+      run: |
+        trivy fs . --severity HIGH,CRITICAL --exit-code 1
+
+    - name: Build Docker Image
+      run: |
+        docker build -t secure-app:latest .
+
+    - name: Trivy Image Scan
+      run: |
+        trivy image secure-app:latest --severity HIGH,CRITICAL --exit-code 1
+
+    - name: Slack Notification
+      if: failure()
+      run: |
+        curl -X POST -H 'Content-type: application/json' \
+        --data '{"text":"❌ CI/CD Pipeline Failed due to security vulnerabilities"}' \
+        ${{ secrets.SLACK_WEBHOOK }}
